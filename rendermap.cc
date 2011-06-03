@@ -115,16 +115,11 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    cout << "Map height: " << m.height << ", width: " << m.width << endl;
-    cout << "Allocating memory..." << endl;
-
     uint8_t scale = 4;
     m.height *= scale;
     m.width *= scale;
 
     RGBA* pixel_data = new RGBA[m.height * m.width];
-
-    cout << "Allocated " << sizeof(RGBA) * m.height*m.width << " bytes" << endl;
 
     /*
      * Madness ensues!
@@ -146,8 +141,6 @@ int main(int argc, char** argv)
 
 void write(PngFile& f, const string& fn)
 {
-    // TODO: Error handling!
-
     png_bytep* row_pointers;
     png_structp png_ptr;
     png_infop info_ptr;
@@ -156,16 +149,34 @@ void write(PngFile& f, const string& fn)
     png_byte bit_depth  = 8;
 
     FILE* fp = fopen(fn.c_str(), "wb");
+    if (!fp)
+    {
+        cerr << "write(): unable to open file '" << fn << "' for writing"
+             << endl;
+        return;
+    }
 
     png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     if (!png_ptr)
-        return;
+    {
+        cerr << "write(): unable to create write struct" << endl;
+        goto cleanup_pre_write;
+    }
 
     info_ptr = png_create_info_struct(png_ptr);
     if (!info_ptr)
-        return;
+    {
+        cerr << "write(): unable to create info struct" << endl;
+        goto cleanup_pre_info;
+    }
 
     png_init_io(png_ptr, fp);
+
+    if (setjmp(png_jmpbuf(png_ptr)))
+    {
+        cerr << "write(): error while writing header" << endl;
+        goto cleanup_pre_alloc;
+    }
 
     png_set_IHDR(png_ptr, info_ptr, f.width, f.height, bit_depth, color_type,
             PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE,
@@ -173,8 +184,29 @@ void write(PngFile& f, const string& fn)
     png_write_info(png_ptr, info_ptr);
 
     row_pointers = (png_bytep*)malloc(sizeof(png_bytep) * f.height);
+    if (!row_pointers)
+    {
+        cerr << "write(): Unable to allocate memory for row pointers" << endl;
+        goto cleanup_pre_alloc;
+    }
+
+    /*
+     * Set everything to 0 so we can spam "free()" over the whole list even if
+     * parts of it where unable to allocate
+     */
+    memset(row_pointers, 0, sizeof(png_bytep) * f.height);
+
     for (int y = 0; y < f.height; ++y)
-        row_pointers[y] = (png_byte*)malloc(png_get_rowbytes(png_ptr, info_ptr));
+    {
+        row_pointers[y] = (png_byte*)malloc(png_get_rowbytes(png_ptr,info_ptr));
+
+        if (!row_pointers[y])
+        {
+            cerr << "write(): Unable to allocate row pointer[" << y << "]"
+                 << endl;
+            goto cleanup_post_alloc; // At least the first alloc succeeded
+        }
+    }
 
     for (int y = 0; y < f.height; ++y)
     {
@@ -193,15 +225,31 @@ void write(PngFile& f, const string& fn)
         }
     }
 
+    if (setjmp(png_jmpbuf(png_ptr)))
+    {
+        cerr << "write(): error while writing image data" << endl;
+        goto cleanup_post_alloc;
+    }
+
     png_write_image(png_ptr, row_pointers);
+
+    if (setjmp(png_jmpbuf(png_ptr)))
+    {
+        cerr << "write(): error while writing end" << endl;
+        goto cleanup_post_alloc;
+    }
+
     png_write_end(png_ptr, NULL);
 
-    png_destroy_write_struct(&png_ptr, &info_ptr);
-
+cleanup_post_alloc:
     for (int y = 0; y < f.height; ++y)
         free(row_pointers[y]);
 
     free(row_pointers);
+cleanup_pre_alloc:
+cleanup_pre_info:
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+cleanup_pre_write:
     fclose(fp);
 
     return;
