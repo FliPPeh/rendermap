@@ -88,10 +88,22 @@ void write(PngFile&, const string&);
 
 int main(int argc, char** argv)
 {
+    uint8_t scale = 4;
     if (argc < 2)
     {
-        cerr << "Usage: " << argv[0] << " <map_file>" << std::endl;
+        cerr << "Usage: " << argv[0] << " <map_file> [scale]" << std::endl;
+        cerr << "where" << endl;
+        cerr << "\tmap_file: 'Map_X.dat' in 'serverroot/world/data'" << endl;
+        cerr << "\tscale   : scale of the map (default '4' [= 1 map pixel "
+                            "translates to 4 pixel in the output])" << endl;
+
         return 1;
+    }
+
+    if (argc > 2)
+    {
+        /* We also got a scale, replace default */
+        scale = static_cast<uint8_t>(::atoi(argv[2]));
     }
 
     NbtFile f;
@@ -106,7 +118,7 @@ int main(int argc, char** argv)
     catch(GzipIOException &e)
     {
         cerr << "Error reading '" << argv[1] << "' (code " << e.getCode() << ")"
-            << endl;
+             << endl;
         return 1;
     }
     catch(InvalidMapException &e)
@@ -115,7 +127,6 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    uint8_t scale = 4;
     m.height *= scale;
     m.width *= scale;
 
