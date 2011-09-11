@@ -84,11 +84,13 @@ static RGBA colors[] = {
 
 
 void load(NbtFile&, MinecraftMap&);
-void write(PngFile&, const string&);
+void write(PngFile&, FILE*);
 
 int main(int argc, char** argv)
 {
     uint8_t scale = 4;
+    const char* filename = NULL;
+
     if (argc < 2)
     {
         cerr << "Usage: " << argv[0] << " <map_file> [scale]" << std::endl;
@@ -106,8 +108,32 @@ int main(int argc, char** argv)
         scale = static_cast<uint8_t>(::atoi(argv[2]));
     }
 
+    if (argc > 3)
+    {
+        /* Got filename, output there */
+        filename = argv[3];
+    }
+
     NbtFile f;
     MinecraftMap m;
+
+    FILE* fp = NULL;
+
+    if (filename == NULL)
+    {
+        fp = stdout;
+    }
+    else
+    {
+        fp = fopen(filename, "wb");
+
+        if (!fp)
+        {
+            cerr << "Unable to open file '" << filename << "' for writing"
+                 << endl;
+            return 1;
+        }
+    }
 
     try
     {
@@ -144,13 +170,15 @@ int main(int argc, char** argv)
 
     PngFile pf = { m.width, m.height, pixel_data };
     string basename(argv[1]);
-    write(pf, basename + ".png");
+
+    write(pf, fp);
+
     delete[] pixel_data;
 
     return 0;
 }
 
-void write(PngFile& f, const string& fn)
+void write(PngFile& f, FILE* fp)
 {
     png_bytep* row_pointers;
     png_structp png_ptr;
@@ -158,14 +186,6 @@ void write(PngFile& f, const string& fn)
 
     png_byte color_type = PNG_COLOR_TYPE_RGBA;
     png_byte bit_depth  = 8;
-
-    FILE* fp = fopen(fn.c_str(), "wb");
-    if (!fp)
-    {
-        cerr << "write(): unable to open file '" << fn << "' for writing"
-             << endl;
-        return;
-    }
 
     png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     if (!png_ptr)
