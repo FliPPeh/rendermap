@@ -20,7 +20,7 @@
 #include <cppnbt.h>
 
 #include <stdlib.h>
-#include <string>
+#include <cstring>
 
 using namespace std;
 using namespace nbt;
