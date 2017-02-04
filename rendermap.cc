@@ -19,7 +19,10 @@
 #include <png.h>
 #include <cppnbt.h>
 
-#include <stdlib.h>
+#include <cassert>
+
+#include <cstring>
+#include <cstdlib>
 #include <string>
 
 using namespace std;
@@ -45,44 +48,16 @@ struct RGBA
     uint8_t a;
 };
 
+static RGBA colors[] = {
+#include "color_data.hh"
+};
+
 struct PngFile
 {
     int16_t width;
     int16_t height;
     RGBA* data;
 };
-
-static RGBA colors[] = {
-    // Transparent
-    {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0},
-    // Grass
-    {89,125,39,255}, {109,153,48,255}, {127,178,56,255}, {109,153,48,255},
-    // Sand
-    {174,164,115,255}, {213,201,140,255}, {247,233,163,255}, {213,201,140,255},
-    // Stone(?)
-    {117,117,117,255}, {144,144,144,255}, {167,167,167,255}, {144,144,144,255},
-    // Lava
-    {180,0,0,255}, {220,0,0,255}, {255,0,0,255}, {220,0,0,255},
-    // Ice
-    {112,112,180,255}, {138,138,220,255}, {160,160,255,255}, {138,138,220,255},
-    // More stone(?)
-    {117,117,117,255}, {144,144,144,255}, {167,167,167,255}, {144,144,144,255},
-    // Leaves
-    {0,87,0,255}, {0,106,0,255}, {0,124,0,255}, {0,106,0,255},
-    // Snow
-    {180,180,180,255}, {220,220,220,255}, {255,255,255,255}, {220,220,220,255},
-    // Yet more stone(?)!
-    {115,118,129,255}, {141,144,158,255}, {164,168,184,255}, {141,144,158,255},
-    // Wood and Dirt
-    {129,74,33,255}, {157,91,40,255}, {183,106,47,255}, {157,91,40,255},
-    // More gray!
-    {79,79,79,255}, {96,96,96,255}, {112,112,112,255}, {96,96,96,255},
-    // Water
-    {45,45,180,255}, {55,55,220,255}, {64,64,255,255}, {55,55,220,255},
-    // Log and Tree
-    {73,58,35,255}, {89,71,43,255}, {104,83,50,255}, {89,71,43,255}
-};
-
 
 void load(NbtFile&, MinecraftMap&);
 void write(PngFile&, FILE*);
@@ -162,12 +137,21 @@ int main(int argc, char** argv)
     /*
      * Madness ensues!
      */
-    for (int y = 0; y < m.height; y += scale)
-        for (int s1 = 0; s1 < scale; ++s1)
-            for (int x = 0; x < m.width; x += scale)
-                for (int s2 = 0; s2 < scale; ++s2)
-                    pixel_data[(y+s1)*m.width + (x+s2)] =
-                        colors[m.map_data[(y/scale)*(m.width/scale)+(x/scale)]];
+    for (int y = 0; y < m.height; y += scale) {
+        for (int s1 = 0; s1 < scale; ++s1) {
+            for (int x = 0; x < m.width; x += scale) {
+                for (int s2 = 0; s2 < scale; ++s2) {
+                    auto pixel = m.map_data[(y/scale)*(m.width/scale)+(x/scale)];
+
+                    if (pixel >= (sizeof(colors) / sizeof(RGBA))) {
+                        std::cerr << (int)pixel << ": unknown color" << std::endl;
+                    }
+
+                    pixel_data[(y+s1)*m.width + (x+s2)] = colors[pixel];
+                }
+            }
+        }
+    }
 
     PngFile pf = { m.width, m.height, pixel_data };
     string basename(argv[1]);

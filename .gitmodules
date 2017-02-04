@@ -1,0 +1,3 @@
+[submodule "cppNBT"]
+	path = cppNBT
+	url = http://github.com/FliPPeh/cppNBT

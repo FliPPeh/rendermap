@@ -1,5 +1,5 @@
 CC=g++
-CCFLAGS=-L. -lz -lpng -lcppnbt -I.
+CCFLAGS=-L./cppNBT -lz -lpng -lcppnbt -I. -I./cppNBT/src
 
 rendermap: rendermap.cc
-	$(CC) $(CCFLAGS) rendermap.cc -lz -lcppnbt -lpng -o rendermap
+	$(CC) $(CCFLAGS) rendermap.cc -lcppnbt -lpng -lz -o rendermap
