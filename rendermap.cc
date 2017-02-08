@@ -28,35 +28,39 @@
 using namespace std;
 using namespace nbt;
 
-struct InvalidMapException
-{
-    // Why not.
+struct InvalidMapException {
+	// Why not.
 };
 
-struct MinecraftMap
-{
-    int16_t width;
-    int16_t height;
-    ByteArray map_data;
+struct MinecraftMap {
+	int16_t width;
+	int16_t height;
+	ByteArray map_data;
 };
 
-struct RGBA
-{
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-    uint8_t a;
+struct RGBA {
+	uint8_t r;
+	uint8_t g;
+	uint8_t b;
+	uint8_t a;
 };
 
-static RGBA colors[] = {
-#include "color_data.hh"
+static std::vector<RGBA> colors_orig{
+#  include "color_data.orig.hh"
 };
 
-struct PngFile
-{
-    int16_t width;
-    int16_t height;
-    RGBA* data;
+static std::vector<RGBA> colors_1_7{
+#  include "color_data.1.7.hh"
+};
+
+static std::vector<RGBA> colors_1_8{
+#  include "color_data.1.8.hh"
+};
+
+struct PngFile {
+	int16_t width;
+	int16_t height;
+	RGBA* data;
 };
 
 void load(NbtFile&, MinecraftMap&);
@@ -64,245 +68,251 @@ void write(PngFile&, FILE*);
 
 int main(int argc, char** argv)
 {
-    uint8_t scale = 4;
-    const char* filename = NULL;
+	uint8_t scale = 4;
+	const char* filename = NULL;
 
-    if (argc < 2)
-    {
-        cerr << "Usage: " << argv[0] << " <map_file> [scale]" << std::endl;
-        cerr << "where" << endl;
-        cerr << "\tmap_file: 'Map_X.dat' in 'serverroot/world/data'" << endl;
-        cerr << "\tscale   : scale of the map (default '4' [= 1 map pixel "
-                            "translates to 4 pixel in the output])" << endl;
+	std::vector<RGBA> const* colors = &colors_orig; 
 
-        return 1;
-    }
+	if (argc < 2) {
+		cerr << "Usage: "
+			<< argv[0] << " <map_file> [scale] [mapping]" << std::endl;
 
-    if (argc > 2)
-    {
-        /* We also got a scale, replace default */
-        scale = static_cast<uint8_t>(::atoi(argv[2]));
-    }
+		cerr << "where" << endl;
+		cerr << "\tmap_file: 'Map_X.dat' in 'serverroot/world/data'" << endl;
+		cerr << "\tscale   : scale of the map (default '4' [= 1 map pixel "
+			"translates to 4 pixel in the output])" << endl;
+		cerr << "\tmapping : color mapping to use ('original', '1.7' or '1.8')"
+			<< endl;
 
-    if (argc > 3)
-    {
-        /* Got filename, output there */
-        filename = argv[3];
-    }
+		return 1;
+	}
 
-    NbtFile f;
-    MinecraftMap m;
+	if (argc > 2) {
+		/* We also got a scale, replace default */
+		scale = static_cast<uint8_t>(::atoi(argv[2]));
+	}
 
-    FILE* fp = NULL;
+	if (argc > 3) {
+		/* Got filename, output there */
+		filename = argv[3];
+	}
 
-    if (filename == NULL)
-    {
-        fp = stdout;
-    }
-    else
-    {
-        fp = fopen(filename, "wb");
+	if (argc > 4) {
+		/* Got colormap */
+		if (!strcmp(argv[4], "1.7")) {
+			colors = &colors_1_7;
+		} else if (!strcmp(argv[4], "1.8")) {
+			colors = &colors_1_8;
+		} else if (!strcmp(argv[4], "original")) {
+			// nop
+		} else {
+			std::cerr << argv[0] << ": invalid mapping: " << argv[4] << std::endl;
+			return 1;
+		}
+	}
 
-        if (!fp)
-        {
-            cerr << "Unable to open file '" << filename << "' for writing"
-                 << endl;
-            return 1;
-        }
-    }
+	NbtFile f;
+	MinecraftMap m;
 
-    try
-    {
-        f.open(argv[1]);
-        f.read();
-        load(f, m);
-    }
-    catch(GzipIOException &e)
-    {
-        cerr << "Error reading '" << argv[1] << "' (code " << e.getCode() << ")"
-             << endl;
-        return 1;
-    }
-    catch(InvalidMapException &e)
-    {
-        cerr << "Invalid map file!" << endl;
-        return 1;
-    }
+	FILE* fp = nullptr;
 
-    m.height *= scale;
-    m.width *= scale;
+	if ((filename == nullptr) || !strcmp(filename, "-")) {
+		fp = stdout;
+	} else {
+		fp = fopen(filename, "wb");
 
-    RGBA* pixel_data = new RGBA[m.height * m.width];
+		if (!fp) {
+			cerr << "Unable to open file '" << filename << "' for writing"
+				<< endl;
+			return 1;
+		}
+	}
 
-    /*
-     * Madness ensues!
-     */
-    for (int y = 0; y < m.height; y += scale) {
-        for (int s1 = 0; s1 < scale; ++s1) {
-            for (int x = 0; x < m.width; x += scale) {
-                for (int s2 = 0; s2 < scale; ++s2) {
-                    auto pixel = m.map_data[(y/scale)*(m.width/scale)+(x/scale)];
+	try {
+		f.open(argv[1]);
+		f.read();
+		load(f, m);
 
-                    if (pixel >= (sizeof(colors) / sizeof(RGBA))) {
-                        std::cerr << (int)pixel << ": unknown color" << std::endl;
-                    }
+	} catch(GzipIOException &e) {
+		cerr << "Error reading '" << argv[1] << "' (code " << e.getCode() << ")"
+			<< endl;
+		return 1;
 
-                    pixel_data[(y+s1)*m.width + (x+s2)] = colors[pixel];
-                }
-            }
-        }
-    }
+	} catch(InvalidMapException &e) {
+		cerr << "Invalid map file!" << endl;
+		return 1;
+	}
 
-    PngFile pf = { m.width, m.height, pixel_data };
-    string basename(argv[1]);
+	m.height *= scale;
+	m.width *= scale;
 
-    write(pf, fp);
+	RGBA* pixel_data = new RGBA[m.height * m.width];
 
-    delete[] pixel_data;
+	/*
+	 * Madness ensues!
+	 */
+	for (int y = 0; y < m.height; y += scale) {
+		for (int s1 = 0; s1 < scale; ++s1) {
+			for (int x = 0; x < m.width; x += scale) {
+				for (int s2 = 0; s2 < scale; ++s2) {
+					auto pixel = m.map_data[(y/scale)*(m.width/scale)+(x/scale)];
+					RGBA data;
 
-    return 0;
+					if (pixel >= colors->size()) {
+						std::cerr << (int)pixel << ": unknown color" << std::endl;
+						data = {255, 0, 255, 255}; 
+					} else {
+						data = (*colors)[pixel];
+					}
+
+					pixel_data[(y+s1)*m.width + (x+s2)] = data;
+				}
+			}
+		}
+	}
+
+	PngFile pf = { m.width, m.height, pixel_data };
+	string basename(argv[1]);
+
+	write(pf, fp);
+
+	delete[] pixel_data;
+
+	return 0;
 }
 
 void write(PngFile& f, FILE* fp)
 {
-    png_bytep* row_pointers;
-    png_structp png_ptr;
-    png_infop info_ptr;
+	png_bytep* row_pointers;
+	png_structp png_ptr;
+	png_infop info_ptr;
 
-    png_byte color_type = PNG_COLOR_TYPE_RGBA;
-    png_byte bit_depth  = 8;
+	png_byte color_type = PNG_COLOR_TYPE_RGBA;
+	png_byte bit_depth  = 8;
 
-    png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (!png_ptr)
-    {
-        cerr << "write(): unable to create write struct" << endl;
-        goto cleanup_pre_write;
-    }
+	png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+	if (!png_ptr) {
+		cerr << "write(): unable to create write struct" << endl;
+		goto cleanup_pre_write;
+	}
 
-    info_ptr = png_create_info_struct(png_ptr);
-    if (!info_ptr)
-    {
-        cerr << "write(): unable to create info struct" << endl;
-        goto cleanup_pre_info;
-    }
+	info_ptr = png_create_info_struct(png_ptr);
+	if (!info_ptr) {
+		cerr << "write(): unable to create info struct" << endl;
+		goto cleanup_pre_info;
+	}
 
-    png_init_io(png_ptr, fp);
+	png_init_io(png_ptr, fp);
 
-    if (setjmp(png_jmpbuf(png_ptr)))
-    {
-        cerr << "write(): error while writing header" << endl;
-        goto cleanup_pre_alloc;
-    }
+	if (setjmp(png_jmpbuf(png_ptr))) {
+		cerr << "write(): error while writing header" << endl;
+		goto cleanup_pre_alloc;
+	}
 
-    png_set_IHDR(png_ptr, info_ptr, f.width, f.height, bit_depth, color_type,
-            PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE,
-            PNG_FILTER_TYPE_BASE);
-    png_write_info(png_ptr, info_ptr);
+	png_set_IHDR(png_ptr, info_ptr, f.width, f.height, bit_depth, color_type,
+			PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE,
+			PNG_FILTER_TYPE_BASE);
+	png_write_info(png_ptr, info_ptr);
 
-    row_pointers = (png_bytep*)malloc(sizeof(png_bytep) * f.height);
-    if (!row_pointers)
-    {
-        cerr << "write(): Unable to allocate memory for row pointers" << endl;
-        goto cleanup_pre_alloc;
-    }
+	row_pointers = (png_bytep*)malloc(sizeof(png_bytep) * f.height);
+	if (!row_pointers) {
+		cerr << "write(): Unable to allocate memory for row pointers" << endl;
+		goto cleanup_pre_alloc;
+	}
 
-    /*
-     * Set everything to 0 so we can spam "free()" over the whole list even if
-     * parts of it where unable to allocate
-     */
-    memset(row_pointers, 0, sizeof(png_bytep) * f.height);
+	/*
+	 * Set everything to 0 so we can spam "free()" over the whole list even if
+	 * parts of it where unable to allocate
+	 */
+	memset(row_pointers, 0, sizeof(png_bytep) * f.height);
 
-    for (int y = 0; y < f.height; ++y)
-    {
-        row_pointers[y] = (png_byte*)malloc(png_get_rowbytes(png_ptr,info_ptr));
+	for (int y = 0; y < f.height; ++y) {
+		row_pointers[y] = (png_byte*)malloc(png_get_rowbytes(png_ptr,info_ptr));
 
-        if (!row_pointers[y])
-        {
-            cerr << "write(): Unable to allocate row pointer[" << y << "]"
-                 << endl;
-            goto cleanup_post_alloc; // At least the first alloc succeeded
-        }
-    }
+		if (!row_pointers[y]) {
+			cerr << "write(): Unable to allocate row pointer[" << y << "]"
+				<< endl;
+			goto cleanup_post_alloc; // At least the first alloc succeeded
+		}
+	}
 
-    for (int y = 0; y < f.height; ++y)
-    {
-        png_byte* row = row_pointers[y];
+	for (int y = 0; y < f.height; ++y) {
+		png_byte* row = row_pointers[y];
 
-        for (int x = 0; x < f.width; ++x)
-        {
-            png_byte* ptr = &(row[x*4]);
+		for (int x = 0; x < f.width; ++x) {
+			png_byte* ptr = &(row[x*4]);
 
-            RGBA* color = &(f.data[y*f.width + x]);
+			RGBA* color = &(f.data[y*f.width + x]);
 
-            ptr[0] = color->r;
-            ptr[1] = color->g;
-            ptr[2] = color->b;
-            ptr[3] = color->a;
-        }
-    }
+			ptr[0] = color->r;
+			ptr[1] = color->g;
+			ptr[2] = color->b;
+			ptr[3] = color->a;
+		}
+	}
 
-    if (setjmp(png_jmpbuf(png_ptr)))
-    {
-        cerr << "write(): error while writing image data" << endl;
-        goto cleanup_post_alloc;
-    }
+	if (setjmp(png_jmpbuf(png_ptr))) {
+		cerr << "write(): error while writing image data" << endl;
+		goto cleanup_post_alloc;
+	}
 
-    png_write_image(png_ptr, row_pointers);
+	png_write_image(png_ptr, row_pointers);
 
-    if (setjmp(png_jmpbuf(png_ptr)))
-    {
-        cerr << "write(): error while writing end" << endl;
-        goto cleanup_post_alloc;
-    }
+	if (setjmp(png_jmpbuf(png_ptr))) {
+		cerr << "write(): error while writing end" << endl;
+		goto cleanup_post_alloc;
+	}
 
-    png_write_end(png_ptr, NULL);
+	png_write_end(png_ptr, nullptr);
 
 cleanup_post_alloc:
-    for (int y = 0; y < f.height; ++y)
-        free(row_pointers[y]);
+	for (int y = 0; y < f.height; ++y)
+		free(row_pointers[y]);
 
-    free(row_pointers);
+	free(row_pointers);
 cleanup_pre_alloc:
 cleanup_pre_info:
-    png_destroy_write_struct(&png_ptr, &info_ptr);
+	png_destroy_write_struct(&png_ptr, &info_ptr);
 cleanup_pre_write:
-    fclose(fp);
+	fclose(fp);
 
-    return;
+	return;
 }
 
 void load(NbtFile& f, MinecraftMap& m)
 {
-    try
-    {
-        TagCompound* file_root = dynamic_cast<TagCompound*>(f.getRoot());
-        if (!file_root)
-            throw InvalidMapException();
+	try {
+		TagCompound* file_root = dynamic_cast<TagCompound*>(f.getRoot());
 
-        TagCompound* map_data = dynamic_cast<TagCompound*>(
-                file_root->getValueAt("data"));
-        if (!map_data)
-            throw InvalidMapException();
+		if (!file_root) {
+			throw InvalidMapException();
+		}
 
-        // Gah...
-        TagShort* height = dynamic_cast<TagShort*>(
-                map_data->getValueAt("height"));
-        TagShort* width = dynamic_cast<TagShort*>(
-                map_data->getValueAt("width"));
-        TagByteArray* data = dynamic_cast<TagByteArray*>(
-                map_data->getValueAt("colors"));
+		TagCompound* map_data = dynamic_cast<TagCompound*>(
+				file_root->getValueAt("data"));
 
-        if (!width || !height || !data)
-            throw InvalidMapException();
+		if (!map_data) {
+			throw InvalidMapException();
+		}
 
-        m.height = height->getValue();
-        m.width  = width->getValue();
-        m.map_data = data->getValue();
-    }
-    catch (KeyNotFoundException& e)
-    {
-        throw InvalidMapException();
-    }
+		TagShort* height = dynamic_cast<TagShort*>(
+				map_data->getValueAt("height"));
+		TagShort* width = dynamic_cast<TagShort*>(
+				map_data->getValueAt("width"));
+		TagByteArray* data = dynamic_cast<TagByteArray*>(
+				map_data->getValueAt("colors"));
 
-    return;
+		if (!width || !height || !data) {
+			throw InvalidMapException();
+		}
+
+		m.height = height->getValue();
+		m.width  = width->getValue();
+		m.map_data = data->getValue();
+
+	} catch (KeyNotFoundException& e) {
+		throw InvalidMapException();
+	}
+
+	return;
 }
