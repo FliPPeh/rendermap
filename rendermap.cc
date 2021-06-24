@@ -57,6 +57,10 @@ static std::vector<RGBA> colors_1_8{
 #  include "color_data.1.8.hh"
 };
 
+static std::vector<RGBA> colors_1_12{
+#  include "color_data.1.12.hh"
+};
+
 struct PngFile {
 	int16_t width;
 	int16_t height;
@@ -75,13 +79,14 @@ int main(int argc, char** argv)
 
 	if (argc < 2) {
 		cerr << "Usage: "
-			<< argv[0] << " <map_file> [scale] [mapping]" << std::endl;
+			<< argv[0] << " <map_file> [scale] [output] [mapping]" << std::endl;
 
 		cerr << "where" << endl;
 		cerr << "\tmap_file: 'Map_X.dat' in 'serverroot/world/data'" << endl;
 		cerr << "\tscale   : scale of the map (default '4' [= 1 map pixel "
 			"translates to 4 pixel in the output])" << endl;
-		cerr << "\tmapping : color mapping to use ('original', '1.7' or '1.8')"
+                cerr << "\toutput  : filename for the png output" << endl;
+		cerr << "\tmapping : color mapping to use ('original', '1.7', '1.8' or '1.12')"
 			<< endl;
 
 		return 1;
@@ -103,6 +108,8 @@ int main(int argc, char** argv)
 			colors = &colors_1_7;
 		} else if (!strcmp(argv[4], "1.8")) {
 			colors = &colors_1_8;
+		} else if (!strcmp(argv[4], "1.12")) {
+			colors = &colors_1_12;
 		} else if (!strcmp(argv[4], "original")) {
 			// nop
 		} else {
